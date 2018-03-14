@@ -22,6 +22,7 @@ K.set_image_dim_ordering('tf')
 
 from keras.applications.vgg16 import VGG16, preprocess_input
 from keras.applications.inception_v3 import InceptionV3, preprocess_input
+from keras import optimizers
 
 class Object_identification(object):
 	def __init__(self):
@@ -45,67 +46,9 @@ class Object_identification(object):
 		self.epochs = 2
 		self.seed = 7
 		self.w = 1
-	
-	def split_video_into_frames():
-		try:
-			if not os.path.exists('images'):
-				os.makedirs('images')
-		except OSError:
-			print ('Error: Creating directory of images')
-		currentFrame = 0
-		for video in os.listdir(self.videos_path):
-			cap = cv2.VideoCapture(self.videos_path+'/'+video)			
-			for i in range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))):
-				ret, frame = cap.read()
-				name = './images/frame' + str(currentFrame) + '.jpg'
-				print ('Creating...' + name)
-				cv2.imwrite(name, frame)
-				currentFrame += 1
-			cap.release()
-			cv2.destroyAllWindows()
-		
-	def prepare_input(self):
-		start = time.time()
-		print('preparing input...')
-		data = []
-		label = []
-		self.num_example = len([name for name in os.listdir(self.images_path)])
-		
-		for i in range(1000,1100):
-			image_array = cv2.imread(self.images_path+'/frame'+str(i)+'.jpg')
-			#data.append(image_array)
-			resized_image_array = cv2.resize(image_array, (299, 299))
-			data.append(resized_image_array)
-			label.append(0)
-		print('next...')
-		for i in range(23000,23100):
-			image_array = cv2.imread(self.images_path+'/frame'+str(i)+'.jpg')
-			#data.append(image_array)
-			resized_image_array = cv2.resize(image_array, (299, 299))
-			data.append(resized_image_array)
-			label.append(1)
-		data = np.array(data)
-		label = np.array(label)
-		print(data.shape)
-		
-		p = np.random.permutation(data.shape[0])
-		X = data[p]
-		y = label[p]
-		X = X.astype('float32')
-		X = X/ 255.0	
-		
-		ratio = round(0.9 * data.shape[0])
-		self.X_train = X[:int(ratio)]
-		self.y_train = y[:int(ratio)]
-		self.X_test = X[int(ratio):]
-		self.y_test = y[int(ratio):]
-		
-		self.y_train_vector = np_utils.to_categorical(self.y_train)
-		self.y_test_vector = np_utils.to_categorical(self.y_test)
-
-		print(self.X_train.shape, self.X_test.shape)
-		#print(self.y_train[:10], self.y_test[:10])
-		print("Time taken for creating numpy arrays: ", time.time() - start)
+		self.top_model = None
+		self.base_model = None
+		self.top_model_weights_path = './results/top_model_weights'+str(self.w)+'.h5'
 
 	def plot_images(self, X, y):
 		for i in range(0, 20):
@@ -171,34 +114,52 @@ class Object_identification(object):
 		self.y_predict_vector = self.model.predict(self.X_test)
 		self.y_predict = np.argmax(self.y_predict_vector, axis=1)
 		
+	def load_numpy_arrays(self):
+		self.X_train = np.load('./numpy_arrays/X_train.npy')
+		self.y_train_vector = np.load('./numpy_arrays/y_train.npy')
+		self.X_test = np.load('./numpy_arrays/X_test.npy')
+		self.y_test_vector = np.load('./numpy_arrays/y_test.npy')
+		print(self.X_train.shape, self.X_test.shape)
+		print(self.y_train_vector.shape, self.y_test_vector.shape)	
+		
 	def using_pretrained_model(self):
 		start = time.time()
 		base_model = InceptionV3(include_top=False, weights='imagenet')
 		#base_model.compile(loss='categorical_crossentropy', optimizer='sgd', metrics=['accuracy'])
 		features_train = base_model.predict(self.X_train, verbose=0)
 		features_test = base_model.predict(self.X_test, verbose=0)
+		self.model = base_model
 		print('Time taken by pretrained model:', time.time() - start)
 		print(features_train.shape, features_test.shape)
 		
-		model = Sequential()
-		model.add(Flatten(input_shape=(8, 8, 2048)))
-		model.add(Dense(128, activation='relu'))
-		model.add(Dense(self.num_labels, activation='softmax'))
-		model.compile(loss='categorical_crossentropy', optimizer='sgd', metrics=['accuracy'])
-		print(model.summary())
-		self.model = model
-		self.history = self.model.fit(features_train, self.y_train_vector, validation_data=(features_test, self.y_test_vector), epochs=self.epochs, batch_size=512)
-		scores = self.model.evaluate(features_test, self.y_test_vector, verbose=0)
+		top_model = Sequential()
+		top_model.add(Flatten(input_shape=features_train.shape[1:]))
+		top_model.add(Dense(256, activation='relu'))
+		top_model.add(Dropout(0.5))
+		top_model.add(Dense(self.num_labels, activation='softmax'))
+		top_model.compile(loss='categorical_crossentropy', optimizer='sgd', metrics=['accuracy'])
+		print(top_model.summary())
+		self.top_model = top_model
+		self.history = top_model.fit(features_train, self.y_train_vector, validation_data=(features_test, self.y_test_vector), epochs=self.epochs, batch_size=512)
+		top_model.save_weights(self.top_model_weights_path)
+		scores = self.top_model.evaluate(features_test, self.y_test_vector, verbose=0)
 		print("Accuracy: %.2f%%" % (scores[1]*100))
-		self.y_predict_vector = self.model.predict(features_test)
+		self.y_predict_vector = self.top_model.predict(features_test)
 		self.y_predict = np.argmax(self.y_predict_vector, axis=1)
 		
+	def fine_tuning(self):
+		self.top_model.load_weights(self.top_model_weights_path)
+		self.model.add(self.top_model)
+		for layer in self.model.layers[:25]:
+			layer.trainable = False
+		sgd = optimizers.SGD(lr=1e-4, momentum=0.9)
+		self.model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])		
+	
 if __name__ == '__main__':
 	obj = Object_identification()
-	#obj.split_video_into_frames()
-	obj.prepare_input()
+	obj.load_numpy_arrays()
 	obj.using_pretrained_model()
-	obj.plot_images(obj.X_test, obj.y_predict)
+	#obj.plot_images(obj.X_test, obj.y_predict)
 	'''
 	obj.use_saved_model = True
 	if obj.use_saved_model:
