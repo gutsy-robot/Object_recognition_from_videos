@@ -30,33 +30,35 @@ from keras import optimizers
 from keras.models import load_model
 
 output_index = 3
-step = 1
+step = 10
 layer_name = 'conv2d_92'
 filter_index = 0
+
 
 
 print('Defining model...')
 base_model = InceptionV3(include_top=False, weights='imagenet', input_shape=(299,299,3))
 print('Base Model defined')
-top_model = load_model('top_model_inception.h5')
+top_model = load_model('top_model_inception500.h5')
 print('Top Model defined')
 model = Model(inputs=base_model.input, outputs=top_model(base_model.output))
 print('Model Defined')
-layer_dict = dict([(layer.name, layer) for layer in model.layers])
+#layer_dict = dict([(layer.name, layer) for layer in model.layers])
 #print(layer_dict)
+
+#print(model.output)
+#print(model.output[:, output_index])
+#layer_output = layer_dict[layer_name].output
+#loss = K.mean(layer_output[:, :, :, filter_index])
 input_img = model.input
-print(model.output)
-print(model.output[:, output_index])
-layer_output = layer_dict[layer_name].output
-loss = K.mean(layer_output[:, :, :, filter_index])
-#loss = K.mean(model.output[:, output_index])
+loss = K.mean(model.output[:, output_index])
 grads = K.gradients(loss, input_img)[0]
 grads /= (K.sqrt(K.mean(K.square(grads))) + 1e-5)
 iterate = K.function([input_img], [loss, grads])
 input_img_data = np.random.random((1, 299, 299, 3)) * 20 + 128.
-print(input_img_data.shape)
+#print(input_img_data.shape)
 
-for i in range(500):
+for i in range(100):
 	print(i)
 	loss_value, grads_value = iterate([input_img_data])
 	input_img_data += grads_value * step

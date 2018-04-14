@@ -38,9 +38,9 @@ class Object_identification(object):
 		self.y_train_vector = None
 		self.y_test_vector = None
 		self.y_predict_vector = None
-		self.num_labels = 2
-		self.output_dim = 2
-		self.class_var = [0,1]
+		self.num_labels = 7
+		self.output_dim = 7
+		self.class_var = [0,1,2,3,4,5,6]
 		self.model = None
 		self.history = None
 		self.epochs = 2
@@ -48,89 +48,35 @@ class Object_identification(object):
 		self.w = 1
 		self.top_model = None
 		self.base_model = None
+		self.accuracy = None
+		self.model=None
+		self.features_test=None
 		self.top_model_weights_path = './results/top_model_weights'+str(self.w)+'.h5'
+		self.model_path = './results/model_without_finetuned'+str(self.w)+'.h5'
 
-	def plot_images(self, X, y):
-		for i in range(0, 20):
-			plt.subplot(4,5,1 + i)	
-			plt.imshow(toimage(X[i]))
-			plt.title('label: '+str(y[i]))
-		plt.show()
-		
-	def plot_loss(self):
-		plt.plot(self.history.history['loss'], color='red')
-		plt.plot(self.history.history['val_loss'], color='blue')
-		plt.xlabel('Epochs')
-		plt.ylabel('Error')
-		plt.legend(['Train', 'Validation'], loc='upper right')
-		plt.title('  l:'+'%.4f'%self.history.history['loss'][-1]+'  a:'+'%.2f'%(self.history.history['acc'][-1]*100)+'  val_l:'+'%.4f'%self.history.history['val_loss'][-1]+
-		'  val_a:'+'%.2f'%(self.history.history['val_acc'][-1]*100))
-		plt.savefig(str(self.results_path)+'/graph'+str(self.w)+'.png')
-		plt.close()
-		
-	def define_model(self):
-		np.random.seed(self.seed)
-		print('defining model...')
-		model = Sequential()
-		model.add(Conv2D(4, (3, 3), input_shape=(360, 640, 3), padding='same', activation='relu', kernel_constraint=maxnorm(3)))
-		model.add(MaxPooling2D(pool_size=(2, 2)))
-		#model.add(Conv2D(4, (3, 3), activation='relu', padding='same', kernel_constraint=maxnorm(3)))
-		model.add(MaxPooling2D(pool_size=(2, 2)))
-		#model.add(Conv2D(4, (3, 3), activation='relu', padding='same', kernel_constraint=maxnorm(3)))
-		model.add(MaxPooling2D(pool_size=(2, 2)))
-		#model.add(Conv2D(4, (3, 3), activation='relu', padding='same', kernel_constraint=maxnorm(3)))
-		#model.add(MaxPooling2D(pool_size=(2, 2)))
-		model.add(Flatten())
-		#model.add(Dense(10, activation='relu', kernel_constraint=maxnorm(3)))
-		#model.add(Dropout(0.5))
-		model.add(Dense(self.num_labels, activation='softmax'))
-		model.compile(loss='categorical_crossentropy', optimizer='sgd', metrics=['accuracy'])
-		print(model.summary())
-		self.model = model
-		
-	def learn_model(self):
-		start = time.time()
-		print('learning model...')		
-		self.history = self.model.fit(self.X_train, self.y_train_vector, validation_data=(self.X_test, self.y_test_vector), epochs=self.epochs, batch_size=512)
-		print("training Time : ", time.time() - start)
-		scores = self.model.evaluate(self.X_test, self.y_test_vector, verbose=0)
-		print("Accuracy: %.2f%%" % (scores[1]*100))
-		self.y_predict_vector = self.model.predict(self.X_test)
-		self.y_predict = np.argmax(self.y_predict_vector, axis=1)
-		print(self.y_predict[:10], self.y_test_vector[:10])
-		
-	def save_model(self):
-		try:
-			if not os.path.exists('results'):
-				os.makedirs('results')
-		except OSError:
-			print ('Error: Creating results folder')
-		self.model.save('./results/model'+str(self.w)+'.h5')
-		
-	def using_saved_model(self):
-		self.model = load_model('./results/model'+str(self.w)+'.h5')
-		scores = self.model.evaluate(self.X_test, self.y_test_vector, verbose=0)
-		print("Accuracy: %.2f%%" % (scores[1]*100))
-		self.y_predict_vector = self.model.predict(self.X_test)
-		self.y_predict = np.argmax(self.y_predict_vector, axis=1)
-		
+	def plot_images(X, y):
+		y = np.argmax(y,axis=1)
+		step = int(round(X.shape[0]/5))
+		for i in range(0, 5*step, step):
+			print(i)
+			for j in range(0, 20):
+				plt.subplot(4,5,1 + j)	
+				plt.imshow(toimage(X[i+j]))
+				plt.title('label: '+str(y[i+j]))
+			plt.show()
+			
 	def load_numpy_arrays(self):
-		self.X_train = np.load('./numpy_arrays/X_train.npy')
-		self.y_train_vector = np.load('./numpy_arrays/y_train.npy')
-		self.X_test = np.load('./numpy_arrays/X_test.npy')
-		self.y_test_vector = np.load('./numpy_arrays/y_test.npy')
-		print(self.X_train.shape, self.X_test.shape)
-		print(self.y_train_vector.shape, self.y_test_vector.shape)	
+		self.X_train = np.load('./X_train.npy')
+		self.y_train_vector = np.load('./y_train.npy')
+		self.X_test = np.load('./numpy_test/X_test.npy')
+		self.y_test_vector = np.load('./numpy_test/y_test.npy')
+		print(self.X_train.shape, self.y_train_vector.shape)
+		print(self.X_test.shape, self.y_test_vector.shape)	
 		
-	def using_pretrained_model(self):
-		start = time.time()
-		base_model = InceptionV3(include_top=False, weights='imagenet')
-		#base_model.compile(loss='categorical_crossentropy', optimizer='sgd', metrics=['accuracy'])
-		features_train = base_model.predict(self.X_train, verbose=0)
-		features_test = base_model.predict(self.X_test, verbose=0)
-		self.model = base_model
-		print('Time taken by pretrained model:', time.time() - start)
-		print(features_train.shape, features_test.shape)
+	def using_pretrained_model(self, X_train, y_train):
+		print('using pretrained model..')
+		print(X_train.shape, y_train.shape)		
+		features_train = self.base_model.predict(X_train, verbose=0)
 		
 		top_model = Sequential()
 		top_model.add(Flatten(input_shape=features_train.shape[1:]))
@@ -139,36 +85,22 @@ class Object_identification(object):
 		top_model.add(Dense(self.num_labels, activation='softmax'))
 		top_model.compile(loss='categorical_crossentropy', optimizer='sgd', metrics=['accuracy'])
 		print(top_model.summary())
-		self.top_model = top_model
-		self.history = top_model.fit(features_train, self.y_train_vector, validation_data=(features_test, self.y_test_vector), epochs=self.epochs, batch_size=512)
-		top_model.save_weights(self.top_model_weights_path)
-		scores = self.top_model.evaluate(features_test, self.y_test_vector, verbose=0)
-		print("Accuracy: %.2f%%" % (scores[1]*100))
-		self.y_predict_vector = self.top_model.predict(features_test)
-		self.y_predict = np.argmax(self.y_predict_vector, axis=1)
-		
-	def fine_tuning(self):
-		self.top_model.load_weights(self.top_model_weights_path)
-		self.model.add(self.top_model)
-		for layer in self.model.layers[:25]:
-			layer.trainable = False
-		sgd = optimizers.SGD(lr=1e-4, momentum=0.9)
-		self.model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])		
-	
+		history = top_model.fit(features_train, y_train, validation_data=(self.features_test,self.y_test_vector), epochs=self.epochs, batch_size=32)
+		self.accuracy = history.history['val_acc'][-1]
+		top_model.save('top_model_inception'+str(X_train.shape[0])+'.h5')
+
 if __name__ == '__main__':
 	obj = Object_identification()
 	obj.load_numpy_arrays()
-	obj.using_pretrained_model()
-	#obj.plot_images(obj.X_test, obj.y_predict)
-	'''
-	obj.use_saved_model = True
-	if obj.use_saved_model:
-		obj.using_saved_model()
-		obj.plot_images(obj.X_test, obj.y_predict)
-	else:
-		obj.define_model()
-		obj.learn_model()
-		obj.save_model()
-		obj.plot_images(obj.X_test, obj.y_predict)
-		obj.plot_loss()
-	'''
+	train_size = [50,100,500,1000,1500,2000,2500,3000,3500]
+	accuracy = []
+	obj.base_model = InceptionV3(include_top=False, weights='imagenet')
+	obj.features_test = obj.base_model.predict(self.X_test, verbose=0)
+	for i in train_size:
+		X_train = obj.X_train[:i]
+		y_train = obj.y_train_vector[:i]
+		obj.using_pretrained_model(X_train, y_train)
+		accuracy.append(obj.accuracy)
+		np.save('accuracy.npy',accuracy)
+	plt.plot(train_size, accuracy)
+	plt.savefig('accu_vs_size.png')

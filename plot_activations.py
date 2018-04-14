@@ -1,4 +1,5 @@
 #plotting activations
+
 import time
 import os, os.path
 os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
@@ -13,16 +14,7 @@ from keras.applications.inception_v3 import InceptionV3, preprocess_input
 from keras import backend as K
 from keras.models import load_model
 
-#imageName = str("drive/app/atul.jpg")
-#image = image_utils.load_img(imageName, target_size=(224, 224))
-#image = image_utils.img_to_array(image)
-#image = np.expand_dims(image, axis=0)
-#image = preprocess_input(image)
-#input_img = image
-#image_preprocessed=np.rollaxis(image,1,4)
-#model = keras.applications.vgg16.VGG16()
-
-layer_name = 'conv2d_7'
+#layer_name = 'conv2d_7'
 layer_nos = [5,100, 200, 300]
 filter_index = 0
 
